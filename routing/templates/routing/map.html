@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="referrer" content="origin-when-cross-origin">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fuel Route Planner</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; display: flex; height: 100vh; }
+  aside { width: 360px; padding: 16px; overflow-y: auto; border-right: 1px solid #ddd; }
+  #map { flex: 1; }
+  h1 { font-size: 18px; margin: 0 0 12px; }
+  label { display: block; font-size: 12px; color: #555; margin-top: 10px; }
+  input { width: 100%; padding: 8px; font-size: 14px; }
+  button { margin-top: 12px; padding: 9px 14px; font-size: 14px; cursor: pointer; }
+  .summary { margin-top: 16px; padding: 10px; background: #f3f6fa; border-radius: 6px; font-size: 14px; }
+  .summary b.cost { font-size: 22px; display: block; }
+  .stop { margin-top: 10px; padding: 8px; border: 1px solid #e2e2e2; border-radius: 6px; font-size: 13px; }
+  .err { color: #b00020; margin-top: 12px; font-size: 14px; }
+  @media (max-width: 800px) { body { flex-direction: column; } aside { width: 100%; height: 45vh; } }
+</style>
+</head>
+<body>
+<aside>
+  <h1>Fuel Route Planner</h1>
+  <label for="start">Start (City, ST - or address - or lat,lng)</label>
+  <input id="start" value="{{ start }}" placeholder="Los Angeles, CA">
+  <label for="finish">Finish</label>
+  <input id="finish" value="{{ finish }}" placeholder="New York, NY">
+  <button id="go">Plan route</button>
+  <div id="out"></div>
+</aside>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map = L.map('map').setView([39.5, -98.35], 4);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
+let layer = null;
+const out = document.getElementById('out');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function plan() {
+  const start = document.getElementById('start').value.trim();
+  const finish = document.getElementById('finish').value.trim();
+  out.innerHTML = 'Planning...';
+  const res = await fetch('/api/route/?' + new URLSearchParams({start, finish}));
+  const data = await res.json();
+  if (!res.ok) { out.innerHTML = '<div class="err">' + esc(typeof data.error === 'string' ? data.error : (data.error && data.error.message) || 'Request failed') + '</div>'; return; }
+
+  if (layer) map.removeLayer(layer);
+  layer = L.layerGroup().addTo(map);
+  const line = L.geoJSON(data.route, {style: {color: '#1a73e8', weight: 4}}).addTo(layer);
+  const pin = (lat, lng, label, color, popup) => L.marker([lat, lng], {icon: L.divIcon({className: '', iconSize: [26, 26], html:
+    `<div style="background:${color};color:#fff;width:26px;height:26px;border-radius:50%;text-align:center;line-height:26px;font-weight:600;border:2px solid #fff;box-shadow:0 0 3px #0006">${label}</div>`})}).bindPopup(popup).addTo(layer);
+  const c = data.route.geometry.coordinates;
+  pin(c[0][1], c[0][0], 'A', '#188038', esc(data.start));
+  pin(c[c.length-1][1], c[c.length-1][0], 'B', '#188038', esc(data.finish));
+  data.fuel_stops.forEach((s, i) => { if (s.lat != null) pin(s.lat, s.lng, i, '#e8710a',
+    `<b>${esc(s.name)}</b><br>$${s.price_per_gallon}/gal<br>${s.gallons} gal = $${s.cost}`); });
+  map.fitBounds(line.getBounds(), {padding: [30, 30]});
+
+  let html = `<div class="summary">${data.total_distance_miles} mi &middot; ${data.duration_hours} h drive<br>
+    ${data.total_gallons} gal at 10 mpg<b class="cost">$${data.total_fuel_cost_usd.toFixed(2)}</b></div>`;
+  data.fuel_stops.forEach((s, i) => {
+    html += `<div class="stop"><b>${i === 0 ? 'Start' : i + '. ' + esc(s.name)}</b><br>${s.city ? esc(s.city) + ', ' + esc(s.state) + ' &middot; ' : ''}mile ${s.mile}<br>
+      ${s.gallons} gal @ $${s.price_per_gallon} = <b>$${s.cost}</b></div>`;
+  });
+  out.innerHTML = html;
+}
+document.getElementById('go').onclick = plan;
+if (document.getElementById('start').value && document.getElementById('finish').value) plan();
+</script>
+</body>
+</html>

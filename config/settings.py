@@ -146,7 +146,8 @@ REST_FRAMEWORK = {
 
 
 # Fuel route project settings
-OSRM_URL = "https://router.project-osrm.org"  # free routing API, key nahi chahiye
-MAX_RANGE_MILES = 500   # gaari ki max range
-MPG = 10                # miles per gallon
-CORRIDOR_MILES = 10     # route se kitni door tak ke pumps consider karne hain
+OSRM_URL = "https://router.project-osrm.org"  # free routing API
+MAX_RANGE_MILES = 500   # Max range of the vehicle (miles)
+MPG = 10                # miles per kilowatt-hour (or per gallon, if using gas)
+CORRIDOR_MILES = 10     # Distance from route to consider stations "on the way" (miles)
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
